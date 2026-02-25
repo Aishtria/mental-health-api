@@ -1,82 +1,50 @@
-// server.js
 import dotenv from 'dotenv';
 dotenv.config();
-
 import express from 'express';
 import cors from 'cors';
 import mysql from 'mysql2/promise';
 
 const app = express();
 
-// 1. CORS Setup - Allows your GitHub Pages to talk to Render
+// 1. IMPROVED CORS: This allows GitHub Pages to talk to your API
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
+  origin: '*', 
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
-// 2. MySQL Connection Pool
-// It will look for DB_PORT (32465) from your Render Environment Variables
+// 2. DATABASE POOL
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 32465, 
+  port: parseInt(process.env.DB_PORT) || 32465,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  connectTimeout: 15000 
+  queueLimit: 0
 });
 
-// 3. Test the connection on startup
-pool.getConnection()
-  .then(conn => {
-    console.log('✅ Connected to Railway MySQL database!');
-    conn.release();
-  })
-  .catch(err => {
-    console.error('❌ MySQL connection error:', err.message);
-  });
-
-// 4. The Mood Submission Route
+// 3. POST ROUTE
 app.post('/mood', async (req, res) => {
-  // Pull data from Vue frontend
   const { full_name, mood_text } = req.body;
-  
-  console.log(`Incoming Data -> Name: ${full_name}, Mood: ${mood_text}`);
-
   try {
-    // Insert into Railway table columns: mood, note
     const [result] = await pool.query(
       'INSERT INTO mood_entries (mood, note) VALUES (?, ?)', 
       [full_name, mood_text]
     );
-    
-    console.log("✅ Row inserted successfully!");
-
-    res.json({ 
-      success: true, 
-      ai_message: `Thanks ${full_name}, your mood has been recorded!` 
-    });
+    res.status(200).json({ success: true });
   } catch (err) {
-    console.error("❌ Database Insert Error:", err.message);
-    res.status(500).json({ 
-      error: 'Database insert failed', 
-      details: err.message 
-    });
+    console.error("DB Error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// 5. Root route for health check
-app.get('/', (req, res) => {
-  res.send('Mental Health API is online and healthy!');
-});
+app.get('/', (req, res) => res.send('API is Live'));
 
-// Use Render's default port or 5000 for local testing
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 API Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
