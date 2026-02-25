@@ -16,7 +16,6 @@ app.use(cors({
 app.use(express.json());
 
 // 2. DATABASE POOL
-// Using the details provided: host, user, password, database, and port 32465
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -29,10 +28,20 @@ const pool = mysql.createPool({
   connectTimeout: 10000 
 });
 
-// 3. TEST CONNECTION
+// 3. TEST CONNECTION & APPLY AUTO-FIX
 pool.getConnection()
-  .then(conn => {
+  .then(async (conn) => {
     console.log('✅ Connected to Railway MySQL database!');
+    
+    // --- EMERGENCY FIX START ---
+    try {
+      await conn.query("ALTER TABLE mood_entries MODIFY COLUMN id INT AUTO_INCREMENT;");
+      console.log("🛠️  DATABASE AUTO-FIX: id is now Auto-Incrementing!");
+    } catch (fixErr) {
+      console.log("ℹ️  Note: Auto-fix skipped (might already be fixed):", fixErr.message);
+    }
+    // --- EMERGENCY FIX END ---
+
     conn.release();
   })
   .catch(err => {
@@ -41,20 +50,15 @@ pool.getConnection()
 
 // 4. POST ROUTE
 app.post('/mood', async (req, res) => {
-  // Destructure from req.body (matches your MoodForm.vue request)
   const { full_name, mood_text } = req.body;
 
   console.log(`📡 Attempting to save: Name: ${full_name}, Mood: ${mood_text}`);
 
-  // Basic validation to prevent 500 errors from empty strings
   if (!full_name || !mood_text) {
     return res.status(400).json({ error: "Name and mood text are required." });
   }
 
   try {
-    // We map your variables to your table columns:
-    // full_name -> mood
-    // mood_text -> note
     const [result] = await pool.query(
       'INSERT INTO mood_entries (mood, note) VALUES (?, ?)', 
       [full_name, mood_text]
@@ -67,7 +71,6 @@ app.post('/mood', async (req, res) => {
       ai_message: `Thanks ${full_name}, your mood has been recorded in our database!` 
     });
   } catch (err) {
-    // This will now print the EXACT reason for the 500 error in your Render logs
     console.error("❌ DATABASE INSERT ERROR:", err.sqlMessage || err.message);
     res.status(500).json({ 
       error: "Internal Server Error", 
@@ -79,7 +82,7 @@ app.post('/mood', async (req, res) => {
 // 5. HEALTH CHECK
 app.get('/', (req, res) => res.send('Mental Health API is Live and Healthy'));
 
-const PORT = process.env.PORT || 10000; // Render uses 10000
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🚀 API Server is running on port ${PORT}`);
 });
