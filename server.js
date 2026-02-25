@@ -6,11 +6,11 @@ import mysql from 'mysql2/promise';
 
 const app = express();
 
-// 1. Enable CORS
+// 1. IMPROVED CORS: Handles preflight and specific origins
 app.use(cors({
-  origin: ['https://aishtria.github.io', 'http://localhost:5173'],
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
+  origin: '*', // Allows all origins for testing; change to your GitHub URL once confirmed working
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
@@ -24,7 +24,10 @@ const pool = mysql.createPool({
   port: parseInt(process.env.DB_PORT) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  ssl: {
+    rejectUnauthorized: false // Required for many cloud MySQL providers like Railway
+  }
 });
 
 // 3. Test Connection on Startup
@@ -42,26 +45,29 @@ app.post('/mood', async (req, res) => {
   const { full_name, email, mood_text, ai_note } = req.body;
   const now = new Date();
 
+  // Safety Check
+  if (!full_name || !mood_text) {
+    return res.status(400).json({ error: "Missing required fields: full_name or mood_text" });
+  }
+
   try {
-    // FIX 1: Ensure column names match. (Using VALUES(full_name) handles the update)
+    // INSERT/UPDATE User
     await pool.query(
       'INSERT INTO users (full_name, email, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE full_name = VALUES(full_name)',
       [full_name, email, now]
     );
 
-    // FIX 2: Fixed the column-to-placeholder count (3 columns = 3 question marks)
-    // NOTE: If you want to see WHO posted the mood in your table, 
-    // you should add a 'full_name' column to your mood_entries table in Railway.
+    // INSERT Mood Entry (Now includes full_name so it's not empty!)
+    // Ensure your table has columns: full_name, mood, note, created_at
     await pool.query(
-      'INSERT INTO mood_entries (mood, note, created_at) VALUES (?, ?, ?)', 
-      [mood_text, ai_note, now]
+      'INSERT INTO mood_entries (full_name, mood, note, created_at) VALUES (?, ?, ?, ?)', 
+      [full_name, mood_text, ai_note, now]
     );
 
     console.log(`✅ Data saved for ${full_name}`);
     res.status(200).json({ success: true, message: "Entry saved!" });
 
   } catch (err) {
-    // Logs the exact SQL error to your Railway/Terminal logs
     console.error("❌ SQL ERROR:", err.message);
     res.status(500).json({ 
       error: "Internal Server Error", 
@@ -72,4 +78,6 @@ app.post('/mood', async (req, res) => {
 
 // 5. Start Server
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
