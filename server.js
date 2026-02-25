@@ -6,9 +6,9 @@ import mysql from 'mysql2/promise';
 
 const app = express();
 
-// 1. IMPROVED CORS: Handles preflight and specific origins
+// 1. CORS - Set to '*' for maximum compatibility during testing
 app.use(cors({
-  origin: '*', // Allows all origins for testing; change to your GitHub URL once confirmed working
+  origin: '*', 
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -21,57 +21,63 @@ const pool = mysql.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: parseInt(process.env.DB_PORT) || 3306,
+  // Ensure DB_PORT is being read correctly
+  port: parseInt(process.env.DB_PORT) || 3306, 
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
   ssl: {
-    rejectUnauthorized: false // Required for many cloud MySQL providers like Railway
+    rejectUnauthorized: false // This is MANDATORY for Railway
   }
 });
 
-// 3. Test Connection on Startup
+// 3. Test Connection
 pool.getConnection()
   .then(conn => {
-    console.log('✅ Connected to Railway MySQL successfully!');
+    console.log('✅ Database connected and ready!');
     conn.release();
   })
   .catch(err => {
-    console.error('❌ Database Connection Failed:', err.message);
+    console.error('❌ Database connection error:', err.message);
   });
 
-// 4. The FIXED Mood Route
+// 4. The Automatic Mood Route
 app.post('/mood', async (req, res) => {
+  // Destructure variables from the request body sent by your website
   const { full_name, email, mood_text, ai_note } = req.body;
   const now = new Date();
 
-  // Safety Check
+  // Basic validation
   if (!full_name || !mood_text) {
-    return res.status(400).json({ error: "Missing required fields: full_name or mood_text" });
+    console.log("⚠️ Blocked: Missing data in request body");
+    return res.status(400).json({ error: "Name and Mood are required." });
   }
 
   try {
-    // INSERT/UPDATE User
+    // A. Sync User Table
     await pool.query(
       'INSERT INTO users (full_name, email, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE full_name = VALUES(full_name)',
-      [full_name, email, now]
+      [full_name, email || 'no-email@test.com', now]
     );
 
-    // INSERT Mood Entry (Now includes full_name so it's not empty!)
-    // Ensure your table has columns: full_name, mood, note, created_at
-    await pool.query(
+    // B. Insert Mood Entry (Matches your successful manual test!)
+    const [result] = await pool.query(
       'INSERT INTO mood_entries (full_name, mood, note, created_at) VALUES (?, ?, ?, ?)', 
-      [full_name, mood_text, ai_note, now]
+      [full_name, mood_text, ai_note || '', now]
     );
 
-    console.log(`✅ Data saved for ${full_name}`);
-    res.status(200).json({ success: true, message: "Entry saved!" });
+    console.log(`✅ Success! New Row ID: ${result.insertId} for ${full_name}`);
+    
+    res.status(200).json({ 
+      success: true, 
+      message: `Entry saved for ${full_name}`,
+      id: result.insertId 
+    });
 
   } catch (err) {
-    console.error("❌ SQL ERROR:", err.message);
+    console.error("❌ SQL ERROR:", err.sqlMessage || err.message);
     res.status(500).json({ 
-      error: "Internal Server Error", 
-      details: err.message 
+      error: "Database insertion failed", 
+      details: err.sqlMessage || err.message 
     });
   }
 });
