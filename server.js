@@ -8,7 +8,7 @@ import mysql from 'mysql2/promise';
 
 const app = express();
 
-// Use a more robust CORS setup to ensure GitHub Pages can always talk to Render
+// 1. CORS Setup - Allows your GitHub Pages to talk to Render
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST'],
@@ -17,20 +17,21 @@ app.use(cors({
 
 app.use(express.json());
 
-// Create MySQL connection pool with Railway settings
+// 2. MySQL Connection Pool
+// It will look for DB_PORT (32465) from your Render Environment Variables
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 3306, // Uses the variable or defaults to 3306
+  port: process.env.DB_PORT || 32465, 
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 10000 // 10 seconds timeout for slower connections
+  connectTimeout: 15000 
 });
 
-// Test connection on startup
+// 3. Test the connection on startup
 pool.getConnection()
   .then(conn => {
     console.log('✅ Connected to Railway MySQL database!');
@@ -40,21 +41,21 @@ pool.getConnection()
     console.error('❌ MySQL connection error:', err.message);
   });
 
-// The main POST route for your MoodForm
+// 4. The Mood Submission Route
 app.post('/mood', async (req, res) => {
-  // These names (full_name, mood_text) come from your Vue App
+  // Pull data from Vue frontend
   const { full_name, mood_text } = req.body;
   
-  console.log(`Received submission from: ${full_name}`);
+  console.log(`Incoming Data -> Name: ${full_name}, Mood: ${mood_text}`);
 
   try {
-    // We map 'full_name' to 'mood' column and 'mood_text' to 'note' column
+    // Insert into Railway table columns: mood, note
     const [result] = await pool.query(
       'INSERT INTO mood_entries (mood, note) VALUES (?, ?)', 
       [full_name, mood_text]
     );
     
-    console.log("✅ Data successfully inserted into Railway!");
+    console.log("✅ Row inserted successfully!");
 
     res.json({ 
       success: true, 
@@ -69,12 +70,13 @@ app.post('/mood', async (req, res) => {
   }
 });
 
-// Root route to check if server is awake
+// 5. Root route for health check
 app.get('/', (req, res) => {
-  res.send('Mental Health API is running!');
+  res.send('Mental Health API is online and healthy!');
 });
 
+// Use Render's default port or 5000 for local testing
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 API Server is running on port ${PORT}`);
 });
