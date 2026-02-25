@@ -37,30 +37,32 @@ pool.getConnection()
   });
 
 app.post('/mood', async (req, res) => {
+  // These variables match your MoodForm.vue exactly
   const { full_name, email, mood_text, ai_note } = req.body;
   const now = new Date();
 
   try {
-    // 1. Save to 'users' table
+    // 1. Insert/Update user (Uses 'name' and 'email' columns)
     await pool.query(
       'INSERT INTO users (name, email, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name=name',
       [full_name, email, now]
     );
 
-    // 2. Save to 'mood_entries' table 
-    // IMPORTANT: Added 'name' (or 'full_name') to the columns so the DB knows whose mood it is
+    // 2. Insert mood entry
+    // Check your Railway table: if the first column is named 'full_name', keep it. 
+    // If it is named 'name', change 'full_name' below to 'name'.
     await pool.query(
       'INSERT INTO mood_entries (full_name, mood, note, created_at) VALUES (?, ?, ?, ?)', 
       [full_name, mood_text, ai_note, now]
     );
 
-    console.log(`✅ Success for ${full_name}`);
+    console.log(`✅ Data saved for ${full_name}`);
     res.status(200).json({ success: true });
   } catch (err) {
     console.error("❌ SQL ERROR:", err.message);
+    // This sends the specific database error back to your browser console
     res.status(500).json({ error: err.message });
   }
 });
-
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
