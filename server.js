@@ -6,15 +6,11 @@ import mysql from 'mysql2/promise';
 
 const app = express();
 
-app.use(cors({
-  origin: '*', 
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+// FIX 1: Open CORS completely to stop "Access Denied" errors from the browser
+app.use(cors());
 app.use(express.json());
 
-// Database Connection
+// Database Connection Pool
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -23,10 +19,10 @@ const pool = mysql.createPool({
   port: parseInt(process.env.DB_PORT) || 3306, 
   waitForConnections: true,
   connectionLimit: 10,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false } // Required for Railway/Render handshake
 });
 
-// Test Connection Log
+// Test Connection on Startup
 pool.getConnection()
   .then(conn => {
     console.log('✅ Database connected and ready!');
@@ -36,6 +32,7 @@ pool.getConnection()
     console.error('❌ Database connection error:', err.message);
   });
 
+// The Main Endpoint
 app.post('/mood', async (req, res) => {
   const { full_name, email, mood_text, ai_note } = req.body;
   const now = new Date();
@@ -45,25 +42,34 @@ app.post('/mood', async (req, res) => {
   }
 
   try {
-    // 1. Sync User
+    // FIX 2: INSERT IGNORE prevents errors if the email already exists in your 'users' table
     await pool.query(
-      'INSERT INTO users (full_name, email, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE full_name = VALUES(full_name)',
-      [full_name, email || 'no-email@test.com', now]
+      'INSERT IGNORE INTO users (full_name, email, created_at) VALUES (?, ?, ?)',
+      [full_name, email || `${full_name.replace(/\s+/g, '').toLowerCase()}@test.com`, now]
     );
 
-    // 2. Insert Mood (Matches your 'DESCRIBE' columns: full_name, mood, note)
+    // FIX 3: Matches your Railway columns exactly (full_name, mood, note)
     const [result] = await pool.query(
       'INSERT INTO mood_entries (full_name, mood, note, created_at) VALUES (?, ?, ?, ?)', 
       [full_name, mood_text, ai_note || '', now]
     );
 
-    console.log(`✅ Success for ${full_name}`);
+    console.log(`✅ Success! Data saved for: ${full_name}`);
     res.status(200).json({ success: true, id: result.insertId });
 
   } catch (err) {
-    console.error("❌ SQL ERROR:", err.message);
-    res.status(500).json({ error: "Database failure", details: err.message });
+    // This logs the SPECIFIC SQL error in your Render dashboard
+    console.error("❌ DATABASE ERROR:", err.sqlMessage || err.message);
+    res.status(500).json({ 
+      error: "Database failure", 
+      details: err.sqlMessage || err.message 
+    });
   }
+});
+
+// Basic health check for Render
+app.get('/', (req, res) => {
+  res.send('Mental Health API is running...');
 });
 
 const PORT = process.env.PORT || 10000;
