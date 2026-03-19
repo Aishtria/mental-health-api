@@ -5,7 +5,11 @@ import moodRoutes from "./routes/moods.js";
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: "https://aishtria.github.io", // Replace with your actual GitHub Pages URL
+  methods: ["GET", "POST"],
+  credentials: true
+}));
 app.use(express.json());
 
 // Routes
