@@ -9,9 +9,11 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-// This sets the base path to /api/moods
+// This maps everything from the frontend's /api/moods to moodRoutes
 app.use("/api/moods", moodRoutes); 
 
-// Use Render's port or default to 5000 for local testing
+// Use Render's port and bind to 0.0.0.0 for external access
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
