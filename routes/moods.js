@@ -4,7 +4,19 @@ import { getAIResponse } from "../services/aiService.js";
 
 const router = express.Router();
 
-// Handles POST requests to https://mental-health-api-5gvy.onrender.com/api/moods
+// --- NEW: GET Route ---
+// Now you can visit /api/moods in your browser to see your data!
+router.get("/", async (req, res) => {
+  try {
+    const [rows] = await db.execute("SELECT * FROM mood_entries ORDER BY created_at DESC");
+    res.json(rows);
+  } catch (error) {
+    console.error("❌ Database Fetch Error:", error);
+    res.status(500).json({ error: "Failed to fetch moods" });
+  }
+});
+
+// --- POST Route (Your existing logic) ---
 router.post("/", async (req, res) => {
   const { user_id, mood_text } = req.body;
 
@@ -17,7 +29,6 @@ router.post("/", async (req, res) => {
     const aiMessage = await getAIResponse(mood_text);
 
     // 2. Save to MySQL (Railway)
-    // We use [result] to destructure the mysql2 promise response
     const [result] = await db.execute(
       "INSERT INTO mood_entries (user_id, mood_text, ai_response) VALUES (?, ?, ?)",
       [user_id || 1, mood_text, aiMessage]
