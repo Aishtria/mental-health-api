@@ -1,26 +1,34 @@
 import express from "express";
-import { getAIResponse } from "../services/aiService.js";
-import { db } from "../db.js";
+import { getAIResponse } from "./aiService.js"; // ✅ Import your new Gemini function
+import db from "../db.js";
 
 const router = express.Router();
 
-router.post("/moods", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const { full_name, user_id, mood_text } = req.body;
+    const { full_name, mood_text } = req.body;
 
-    // Save to DB
-    await db.query(
-      "INSERT INTO moods (full_name, user_id, mood_text) VALUES (?, ?, ?)",
-      [full_name, user_id, mood_text]
-    );
+    if (!mood_text) {
+      return res.status(400).json({ error: "Please tell me how you feel!" });
+    }
 
-    // Get AI response
+    // 1. Get the response from Gemini
     const aiMessage = await getAIResponse(mood_text);
 
-    res.status(201).json({ message: "Mood recorded", aiMessage });
+    // 2. Save to your March 20 Railway table
+    const sql = `INSERT INTO mood_entries (user_id, mood_text, ai_response) VALUES (?, ?, ?)`;
+    await db.query(sql, [1, mood_text, aiMessage]);
+
+    console.log("✅ Gemini response saved to Railway!");
+
+    res.status(201).json({ 
+      success: true, 
+      aiMessage: aiMessage 
+    });
+
   } catch (error) {
-    console.error("Route Error:", error);
-    res.status(500).json({ error: "Server Error" });
+    console.error("❌ Sync Error:", error.message);
+    res.status(500).json({ error: "Server Error", details: error.message });
   }
 });
 
