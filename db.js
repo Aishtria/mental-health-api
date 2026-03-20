@@ -6,25 +6,30 @@ const db = mysql.createPool({
   user: process.env.MYSQLUSER,
   password: process.env.MYSQLPASSWORD,
   database: process.env.MYSQLDATABASE,
-  // ⚡ FIX 1: Ensure port is a Number
-  port: Number(process.env.MYSQLPORT) || 32465, 
+  // Ensure port is a number, default to Railway's public port
+  port: parseInt(process.env.MYSQLPORT) || 32465,
   waitForConnections: true,
   connectionLimit: 10,
-  // ⚡ FIX 2: Explicit SSL configuration for Railway
   ssl: {
     rejectUnauthorized: false
   }
 });
 
-// Check connection status
-db.getConnection()
-  .then((connection) => {
+// Test the connection immediately
+(async () => {
+  try {
+    const connection = await db.getConnection();
     console.log("✅ SUCCESS: Linked to Railway MySQL!");
-    connection.release(); // Always release the connection
-  })
-  .catch((err) => {
-    // ⚡ FIX 3: Print the FULL error so we can see why it's failing
-    console.error("❌ Database connection error:", err);
-  });
+    connection.release();
+  } catch (err) {
+    // This will now print the FULL error details in Render logs
+    console.error("❌ Database connection error details:", {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      host: process.env.MYSQLHOST
+    });
+  }
+})();
 
 export default db;
